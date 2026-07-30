@@ -10,6 +10,7 @@ export interface App {
   readonly id: AppId;
   readonly name: string;
   readonly command: string;
+  readonly fixedArgs: readonly string[];
 }
 
 export interface AppCatalog {
@@ -31,9 +32,14 @@ export type LaunchResult =
   | { readonly success: true }
   | { readonly success: false; readonly failure: ProcessFailureKind };
 
+interface AvailabilityProbe {
+  readonly command: string;
+  readonly args: readonly string[];
+}
+
 const EDITOR_APPS: readonly App[] = [
-  { id: "vscode", name: "VS Code", command: "code" },
-  { id: "cursor", name: "Cursor", command: "cursor" },
+  { id: "vscode", name: "VS Code", command: "code", fixedArgs: ["--"] },
+  { id: "cursor", name: "Cursor", command: "cursor", fixedArgs: ["--"] },
 ];
 
 export function resolveExplorerCommand(
@@ -61,7 +67,7 @@ export function createAppCatalog({
 
   return {
     getDetectedApps() {
-      detectedApps ??= detectApps(apps, executor, timeoutMs);
+      detectedApps ??= detectApps(apps, platform, executor, timeoutMs);
       return detectedApps;
     },
   };
@@ -78,7 +84,7 @@ export async function launchApp(
   try {
     const result = await executor({
       command: app.command,
-      args: [directory],
+      args: [...app.fixedArgs, directory],
       cwd: directory,
       timeoutMs,
     });
@@ -98,22 +104,32 @@ function canonicalApps(platform: NodeJS.Platform): readonly App[] {
   return explorerCommand
     ? [
         ...EDITOR_APPS,
-        { id: "explorer", name: "File Explorer", command: explorerCommand },
+        {
+          id: "explorer",
+          name: "File Explorer",
+          command: explorerCommand,
+          fixedArgs:
+            platform === "darwin" ? ["-a", "Finder", "--"] : [],
+        },
       ]
     : EDITOR_APPS;
 }
 
 async function detectApps(
   apps: readonly App[],
+  platform: NodeJS.Platform,
   executor: ProcessExecutor,
   timeoutMs: number,
 ): Promise<readonly App[]> {
   const detected = await Promise.all(
     apps.map(async (app) => {
       try {
+        const probe = availabilityProbe(app, platform);
+        if (!probe) return undefined;
+
         const result = await executor({
-          command: app.command,
-          args: ["--version"],
+          command: probe.command,
+          args: probe.args,
           cwd: process.cwd(),
           timeoutMs,
         });
@@ -125,6 +141,25 @@ async function detectApps(
   );
 
   return detected.filter((app): app is App => app !== undefined);
+}
+
+function availabilityProbe(
+  app: App,
+  platform: NodeJS.Platform,
+): AvailabilityProbe | undefined {
+  if (app.id !== "explorer") {
+    return { command: app.command, args: ["--version"] };
+  }
+
+  switch (platform) {
+    case "darwin":
+    case "linux":
+      return { command: "which", args: [app.command] };
+    case "win32":
+      return { command: "where.exe", args: [app.command] };
+    default:
+      return undefined;
+  }
 }
 
 function isSuccessfulWindowsExplorerExit(

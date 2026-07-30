@@ -5,17 +5,23 @@ const execFile = vi.hoisted(() => vi.fn());
 vi.mock("node:child_process", () => ({ execFile }));
 
 import { launchApp, type App } from "../../src/apps.js";
-import type {
-  ProcessExecutor,
+import type { ProcessExecutor } from "../../src/process.js";
+import {
+  defaultProcessExecutor,
+  PROCESS_MAX_BUFFER_BYTES,
 } from "../../src/process.js";
-import { defaultProcessExecutor } from "../../src/process.js";
 
-const app: App = { id: "vscode", name: "VS Code", command: "code" };
+const app: App = {
+  id: "vscode",
+  name: "VS Code",
+  command: "code",
+  fixedArgs: ["--"],
+};
 const directory = "/projects/a folder;with&special$characters";
 const success = { stdout: "", stderr: "" } as const;
 
 describe("launchApp", () => {
-  test("returns success and passes the path as one shell-free argv entry", async () => {
+  test("returns success and keeps the path atomic after fixed editor arguments", async () => {
     const executor = vi.fn<ProcessExecutor>(async () => success);
 
     await expect(
@@ -23,7 +29,7 @@ describe("launchApp", () => {
     ).resolves.toEqual({ success: true });
     expect(executor).toHaveBeenCalledWith({
       command: "code",
-      args: [directory],
+      args: ["--", directory],
       cwd: directory,
       timeoutMs: 100,
     });
@@ -51,6 +57,7 @@ describe("launchApp", () => {
       id: "explorer",
       name: "File Explorer",
       command: "explorer",
+      fixedArgs: [],
     };
     const executor: ProcessExecutor = async () => ({
       ...success,
@@ -81,11 +88,10 @@ describe("launchApp", () => {
       launchApp(app, directory, { executor, timeoutMs: 100 }),
     ).resolves.toEqual({ success: false, failure: "spawn" });
   });
-
 });
 
 describe("defaultProcessExecutor", () => {
-  test("uses execFile with one argv entry and no shell", async () => {
+  test("uses execFile with an explicit disabled shell and bounded output", async () => {
     const execution = defaultProcessExecutor({
       command: "code",
       args: [directory],
@@ -104,6 +110,8 @@ describe("defaultProcessExecutor", () => {
       {
         cwd: directory,
         encoding: "utf8",
+        maxBuffer: PROCESS_MAX_BUFFER_BYTES,
+        shell: false,
         timeout: 100,
         windowsHide: true,
       },

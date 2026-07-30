@@ -2,6 +2,8 @@ import { execFile } from "node:child_process";
 
 export type ProcessFailureKind = "spawn" | "exit" | "timeout";
 
+export const PROCESS_MAX_BUFFER_BYTES = 1024 * 1024;
+
 export interface ProcessRequest {
   readonly command: string;
   readonly args: readonly string[];
@@ -31,6 +33,8 @@ export const defaultProcessExecutor: ProcessExecutor = (request) =>
         {
           cwd: request.cwd,
           encoding: "utf8",
+          maxBuffer: PROCESS_MAX_BUFFER_BYTES,
+          shell: false,
           timeout: request.timeoutMs,
           windowsHide: true,
         },

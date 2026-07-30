@@ -14,24 +14,35 @@ The plugin SHALL support exactly three applications in a fixed canonical order: 
 - **WHEN** an application in the set is not detected on the current machine
 - **THEN** it SHALL NOT appear in the picker dialog and SHALL NOT be selectable as the favourite
 
-### Requirement: Platform-specific launch commands
+### Requirement: Platform-specific fixed launch templates
 
-The plugin SHALL resolve launch commands from the current platform. VS Code SHALL use `code`, Cursor SHALL use `cursor`, and the file explorer SHALL use `open` on macOS (`darwin`), `xdg-open` on Linux, and `explorer` on Windows (`win32`).
+The plugin SHALL own a shell-free, fixed command and argv template for every supported application. Each template SHALL insert the validated project root exactly once as one atomic argv value and SHALL NOT derive options or additional argv entries from project data. VS Code SHALL use `code` and Cursor SHALL use `cursor`; each editor's fixed template SHALL be `["--", projectRoot]` when that CLI's option-terminator support is confirmed and SHALL otherwise be `[projectRoot]`. The file explorer SHALL use the platform-specific templates defined below.
+
+#### Scenario: Editor launch template
+
+- **WHEN** VS Code or Cursor is launched
+- **THEN** the command SHALL be the fixed command for that editor
+- **AND** argv SHALL be either `[projectRoot]` or `["--", projectRoot]`, according to that editor's fixed template and option-terminator support
+- **AND** the project root SHALL remain one atomic argv value
 
 #### Scenario: macOS file explorer
 
 - **WHEN** the platform is `darwin` and the file explorer is launched
-- **THEN** the command SHALL be `open` with the project root as its only argument
+- **THEN** the command SHALL be `open`
+- **AND** argv SHALL be `["-a", "Finder", "--", projectRoot]`
+- **AND** Finder SHALL be invoked explicitly rather than relying on generic content dispatch
 
 #### Scenario: Linux file explorer
 
 - **WHEN** the platform is `linux` and the file explorer is launched
-- **THEN** the command SHALL be `xdg-open` with the project root as its only argument
+- **THEN** the command SHALL be `xdg-open` with argv `[projectRoot]`
+- **AND** the requirement SHALL be understood as dispatch through the platform's configured handler without claiming that a particular file manager is forced
 
 #### Scenario: Windows file explorer
 
 - **WHEN** the platform is `win32` and the file explorer is launched
-- **THEN** the command SHALL be `explorer` with the project root as its only argument
+- **THEN** the command SHALL be `explorer` with the safe fixed argv template `[projectRoot]`
+- **AND** the project root SHALL NOT be concatenated with switches, commas, or other command text
 
 #### Scenario: Unsupported platform
 
@@ -61,12 +72,12 @@ The plugin SHALL probe for each application's availability at most once per plug
 
 ### Requirement: Shell-free launching through an injectable executor
 
-All external process invocation SHALL go through an injectable `ProcessExecutor` abstraction whose default implementation calls `execFile(command, [directory], { timeout, windowsHide: true })`. The plugin SHALL NOT spawn a shell and SHALL NOT interpolate the directory into a command string.
+All external process invocation SHALL go through an injectable `ProcessExecutor` abstraction whose default implementation calls `execFile(command, args, { timeout, windowsHide: true })` with the command and argv supplied by an application-owned fixed launch template. The plugin SHALL NOT spawn a shell, SHALL NOT interpolate the project root into a command string, and SHALL NOT permit project data to create executable options or additional argv entries.
 
 #### Scenario: Directory with spaces or shell metacharacters
 
 - **WHEN** the project root contains spaces, quotes, or characters such as `;`, `&`, or `$`
-- **THEN** the path SHALL be passed as a single argv entry
+- **THEN** the path SHALL be passed as one atomic argv value within the selected application's fixed template
 - **AND** no shell interpretation SHALL occur
 
 #### Scenario: Tests substitute the executor
