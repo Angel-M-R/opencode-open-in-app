@@ -2,6 +2,12 @@
 
 An OpenCode TUI plugin for opening the current project in a desktop app.
 
+<img width="426" height="116" alt="CleanShot 2026-08-01 at 13 11 58@2x" src="https://github.com/user-attachments/assets/105a6ffc-172d-41eb-8766-bd275387be8a" />
+
+<img width="1052" height="394" alt="CleanShot 2026-08-01 at 13 12 37@2x" src="https://github.com/user-attachments/assets/1004207f-c5b7-4bb3-968c-c0d6df7619f1" />
+
+
+
 ## Installation
 
 Install the public package directly when it is available:
