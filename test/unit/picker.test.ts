@@ -262,4 +262,24 @@ describe("application picker", () => {
     await expect(picker.launch(apps[0], "/project/root")).resolves.toBeUndefined();
     await expect(picker.open("/project/root")).resolves.toBeUndefined();
   });
+
+  it("reports a picker dialog that fails to open", async () => {
+    const toast = vi.fn();
+    const picker = createApplicationPicker({
+      catalog: { getDetectedApps: async () => apps },
+      store: { get: () => undefined, set: () => {} },
+      dialog: {
+        show: () => {
+          throw new Error("dialog failed");
+        },
+      },
+      toast,
+      launch: async () => ({ success: true }),
+      onFavouriteChanged: () => {},
+    });
+
+    await picker.open("/project/root");
+
+    expect(toast).toHaveBeenCalledOnce();
+  });
 });

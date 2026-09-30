@@ -40,6 +40,7 @@ describe("launchApp", () => {
     ["spawn", undefined],
     ["exit", 7],
     ["timeout", undefined],
+    ["output", undefined],
   ] as const)("returns a %s failure", async (kind, exitCode) => {
     const failure = {
       kind,
@@ -52,7 +53,7 @@ describe("launchApp", () => {
     ).resolves.toEqual({ success: false, failure: kind });
   });
 
-  test("treats a non-zero explorer exit as success", async () => {
+  test("treats explorer's delegated exit code 1 as success", async () => {
     const explorer: App = {
       id: "explorer",
       name: "File Explorer",
@@ -67,6 +68,23 @@ describe("launchApp", () => {
     await expect(
       launchApp(explorer, directory, { executor, timeoutMs: 100 }),
     ).resolves.toEqual({ success: true });
+  });
+
+  test("reports any other explorer exit code as a failure", async () => {
+    const explorer: App = {
+      id: "explorer",
+      name: "File Explorer",
+      command: "explorer",
+      fixedArgs: [],
+    };
+    const executor: ProcessExecutor = async () => ({
+      ...success,
+      failure: { kind: "exit", exitCode: 2 },
+    });
+
+    await expect(
+      launchApp(explorer, directory, { executor, timeoutMs: 100 }),
+    ).resolves.toEqual({ success: false, failure: "exit" });
   });
 
   test("normalises a rejected executor as a spawn failure", async () => {
@@ -121,4 +139,38 @@ describe("defaultProcessExecutor", () => {
     callback(null, "opened", "");
     await expect(execution).resolves.toEqual({ stdout: "opened", stderr: "" });
   });
+
+  test.each([
+    [
+      "output",
+      { code: "ERR_CHILD_PROCESS_STDIO_MAXBUFFER", killed: true },
+      { kind: "output" },
+    ],
+    ["timeout", { code: "ETIMEDOUT" }, { kind: "timeout" }],
+    ["killed", { killed: true }, { kind: "timeout" }],
+    ["exit", { code: 3 }, { kind: "exit", exitCode: 3 }],
+    ["spawn", { code: "ENOENT" }, { kind: "spawn" }],
+  ] as const)(
+    "classifies a %s error",
+    async (_name, details, failure) => {
+      const execution = defaultProcessExecutor({
+        command: "code",
+        args: [directory],
+        cwd: directory,
+        timeoutMs: 100,
+      });
+      const callback = execFile.mock.lastCall?.[3] as (
+        error: Error | null,
+        stdout: string,
+        stderr: string,
+      ) => void;
+
+      callback(Object.assign(new Error("failed"), details), "out", "err");
+      await expect(execution).resolves.toEqual({
+        stdout: "out",
+        stderr: "err",
+        failure,
+      });
+    },
+  );
 });

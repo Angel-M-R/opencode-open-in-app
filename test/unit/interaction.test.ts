@@ -55,6 +55,19 @@ describe("activation interaction", () => {
     expect(activate).toHaveBeenCalledOnce();
   });
 
+  it.each([
+    ["repeated flag", { repeated: true }],
+    ["repeat event type", { eventType: "repeat" as const }],
+  ])("consumes a held %s key without relaunching", (_label, repeat) => {
+    const event = { ...keyEvent("return"), ...repeat };
+    const activate = vi.fn();
+
+    expect(activateFromKey(event, activate)).toBe(true);
+    expect(event.preventDefault).toHaveBeenCalledOnce();
+    expect(event.stopPropagation).toHaveBeenCalledOnce();
+    expect(activate).not.toHaveBeenCalled();
+  });
+
   it("handles a primary mouse event, focuses its target, and stops bubbling", () => {
     const event = mouseEvent(0);
     const activate = vi.fn();

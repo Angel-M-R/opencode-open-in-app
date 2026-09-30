@@ -1,136 +1,69 @@
-import type {
-  TuiPlugin,
-  TuiPluginApi,
-  TuiPluginModule,
-  TuiSlotPlugin,
-  TuiThemeCurrent,
-} from "@opencode-ai/plugin/tui";
-import { createRoot, createSignal, onCleanup } from "solid-js";
-
-import {
-  createAppCatalog,
-  launchApp,
-  type App,
-  type AppCatalog,
-  type LaunchResult,
-} from "./apps.js";
+import { Plugin } from "@opencode/plugin/tui";
+import { createSignal } from "solid-js";
+import { createAppCatalog, launchApp, type App, type AppCatalog, type LaunchResult } from "./apps.js";
 import { createActivationRegionHandlers } from "./interaction.js";
-import {
-  createApplicationPicker,
-  type ApplicationPickerDialogSurface,
-  type FavouriteAppStore,
-} from "./picker.js";
+import { createApplicationPicker, type FavouriteAppStore } from "./picker.js";
 import { FavouriteAppPreference } from "./favourite.js";
 import { registerOpenFavouriteKeymap } from "./keymap.js";
 import { resolveProjectRoot } from "./project.js";
 
-export const SIDEBAR_CONTENT_SLOT_ORDER = 89;
 export const DEFAULT_PROCESS_TIMEOUT_MS = 1_500;
-
 export interface OpenInAppTuiDependencies {
   readonly catalog?: AppCatalog;
   readonly launch?: (app: App, projectRoot: string) => Promise<LaunchResult>;
   readonly favouriteStore?: FavouriteAppStore;
 }
 
-export function createOpenInAppTui(
-  dependencies: OpenInAppTuiDependencies = {},
-): TuiPluginModule {
-  const tui: TuiPlugin = async (api) => {
-    const catalog =
-      dependencies.catalog ??
-      createAppCatalog({ timeoutMs: DEFAULT_PROCESS_TIMEOUT_MS });
-    const store =
-      dependencies.favouriteStore ?? new FavouriteAppPreference(api.kv);
-
-    createRoot((disposeRoot) => {
-      const [displayedFavourite, setDisplayedFavourite] = createSignal<
-        App | undefined
-      >(undefined);
-      let lifecycleDisposed = false;
-      let removeKeymapLayer: (() => void) | undefined;
-      const dispose = (): void => {
-        if (lifecycleDisposed) return;
-        lifecycleDisposed = true;
-        removeKeymapLayer?.();
-        removeKeymapLayer = undefined;
-        disposeRoot();
-      };
-
-      const removeLifecycleHandler = api.lifecycle.onDispose(dispose);
-      onCleanup(removeLifecycleHandler);
-
-      const picker = createApplicationPicker({
-        catalog,
-        store,
-        dialog: createDialogSurface(api),
-        toast: (message) => api.ui.toast({ variant: "warning", message }),
-        launch:
-          dependencies.launch ??
-          ((app, projectRoot) =>
-            launchApp(app, projectRoot, {
-              timeoutMs: DEFAULT_PROCESS_TIMEOUT_MS,
-            })),
-        onFavouriteChanged: setDisplayedFavourite,
-      });
-      void resolvePersistedFavourite(catalog, store).then((app) => {
-        if (!lifecycleDisposed && app) setDisplayedFavourite(app);
-      });
-
-      const openPicker = (): void => {
-        const projectRoot = resolveProjectRoot(api);
-        if (projectRoot) void picker.open(projectRoot);
-      };
-      const activateFavourite = (): void => {
-        const projectRoot = resolveProjectRoot(api);
-        if (!projectRoot) return;
-
-        const favourite = displayedFavourite();
-        if (favourite) {
-          void picker.launch(favourite, projectRoot);
-        } else {
-          void picker.open(projectRoot);
-        }
-      };
-      const registeredKeymapLayer = registerOpenFavouriteKeymap(
-        api,
-        activateFavourite,
-      );
-      if (lifecycleDisposed) {
-        registeredKeymapLayer?.();
-      } else {
-        removeKeymapLayer = registeredKeymapLayer;
-      }
-
-      const slotRegistration = {
-        order: SIDEBAR_CONTENT_SLOT_ORDER,
-        slots: {
-          sidebar_content(context) {
-            return (
-              <OpenInAppControl
-                favourite={displayedFavourite()}
-                theme={context.theme.current}
-                activateLabel={activateFavourite}
-                activateChevron={openPicker}
-              />
-            );
-          },
-        },
-        dispose,
-      } satisfies TuiSlotPlugin;
-      api.slots.register(slotRegistration);
-    });
-  };
-
-  return {
+export function createOpenInAppTui(dependencies: OpenInAppTuiDependencies = {}) {
+  return Plugin.define({
     id: "opencode-open-in-app",
-    tui,
-  };
+    setup(context) {
+      const catalog = dependencies.catalog ?? createAppCatalog({ timeoutMs: DEFAULT_PROCESS_TIMEOUT_MS });
+      const [saved, save] = context.storage.store<{ favourite?: string }>("favourite", { initial: {} });
+      const warn = (message: string) => context.ui.toast.show({ variant: "warning", message });
+      const store = dependencies.favouriteStore ?? new FavouriteAppPreference({
+        get: <Value,>(_key: string, fallback?: Value) => (saved.favourite ?? fallback) as Value,
+        set: (_key, value) => { void save(draft => { draft.favourite = value as string }).catch(error => warn(String(error))); },
+      });
+      const [favourite, setFavourite] = createSignal<App>();
+      let disposed = false;
+      const project = () => {
+        const route = context.ui.router.current();
+        const location = route.type === "session" ? context.data.session.get(route.sessionID)?.location : context.location;
+        return resolveProjectRoot({ state: { path: {
+          directory: location?.directory,
+          worktree: context.location?.directory ?? context.data.location.default().directory,
+        } } });
+      };
+      const picker = createApplicationPicker({
+        catalog, store, toast: warn,
+        onFavouriteChanged: app => { if (!disposed) setFavourite(app); },
+        launch: dependencies.launch ?? ((app, root) => launchApp(app, root, { timeoutMs: DEFAULT_PROCESS_TIMEOUT_MS })),
+        dialog: { show(input) {
+          void context.ui.dialog.select({ title: input.title, options: [...input.options] })
+            .then(app => { if (app && !disposed) input.onSelect(app); }).catch(error => warn(String(error)));
+        } },
+      });
+      void resolvePersistedFavourite(catalog, store).then(app => { if (!disposed) setFavourite(app); });
+      const pick = () => { const root = project(); if (root && !disposed) void picker.open(root); };
+      const activate = () => {
+        const root = project(); if (!root || disposed) return;
+        const app = favourite(); if (app) void picker.launch(app, root); else void picker.open(root);
+      };
+      // The always-mounted app slot owns the only keymap layer, so commands exist once on every route.
+      const releaseCommands = context.ui.slot({ append: "app", render: () => {
+        registerOpenFavouriteKeymap(context, activate, pick); return null;
+      } });
+      const releaseSidebar = context.ui.slot({ prepend: "sidebar.content", render: () =>
+        <OpenInAppControl favourite={favourite()} theme={context.theme} activateLabel={activate} activateChevron={pick} /> });
+      return () => { if (disposed) return; disposed = true; releaseSidebar(); releaseCommands(); };
+    },
+  });
 }
 
 function OpenInAppControl(props: {
   readonly favourite: App | undefined;
-  readonly theme: TuiThemeCurrent;
+  readonly theme: Plugin.Context["theme"];
   readonly activateLabel: () => void;
   readonly activateChevron: () => void;
 }) {
@@ -151,7 +84,7 @@ function OpenInAppControl(props: {
           wrapMode="none"
           truncate
           selectable={false}
-          fg={props.theme.textMuted}
+          fg={props.theme.text.muted}
         >
           {`Open in${props.favourite ? ` ${props.favourite.name}` : ""} `}
         </text>
@@ -168,7 +101,7 @@ function OpenInAppControl(props: {
           wrapMode="none"
           truncate
           selectable={false}
-          fg={props.theme.textMuted}
+          fg={props.theme.text.muted}
         >
           ↓
         </text>
@@ -195,23 +128,5 @@ async function resolvePersistedFavourite(
   }
 }
 
-function createDialogSurface(api: TuiPluginApi): ApplicationPickerDialogSurface {
-  return {
-    show({ title, options, onSelect }) {
-      api.ui.dialog.replace(() =>
-        api.ui.DialogSelect({
-          title,
-          options: [...options],
-          onSelect(option) {
-            api.ui.dialog.clear();
-            onSelect(option.value);
-          },
-        }),
-      );
-    },
-  };
-}
 
-const plugin = createOpenInAppTui();
-
-export default plugin;
+export default createOpenInAppTui();

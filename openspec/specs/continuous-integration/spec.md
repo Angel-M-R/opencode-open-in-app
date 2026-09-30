@@ -25,11 +25,11 @@ The CI workflow SHALL be validation-only, SHALL request only read access to repo
 - **THEN** no npm version, git tag, or GitHub Release SHALL be created by CI
 
 ### Requirement: CI exercises the supported Node floor
-CI SHALL run on Node.js 22.13, matching the minimum version declared by the package's consumer engine contract. The release workflow MAY use a newer runtime required by npm Trusted Publishing.
+CI SHALL run on Node.js 26.4, matching the minimum version declared by the package's consumer engine contract. The release workflow MAY use a newer runtime required by npm Trusted Publishing.
 
 #### Scenario: Minimum-version compatibility
 - **WHEN** CI validates the package
-- **THEN** typecheck, tests, build, package inspection, and audit SHALL execute on Node.js 22.13
+- **THEN** typecheck, tests, build, package inspection, and audit SHALL execute on Node.js 26.4
 
 ### Requirement: Workflow installation is reproducible and script-free
 CI and release workflows SHALL provision pnpm from the manifest's `packageManager` field and install from the committed lockfile using `pnpm install --frozen-lockfile --ignore-scripts`.
