@@ -15,41 +15,39 @@ file explorer. Click the sidebar label or press Alt+O to use the favourite.
 Click the arrow or use `/open-in-app-choose` to choose another application.
 The favourite is saved with OpenCode's native plugin storage.
 
-## OpenCode v2 migration
+## Install
 
-This branch targets OpenCode 2.0.18 and OpenTUI 0.5.12. It uses the native
-`@opencode/plugin/tui` API and no longer supports the v1 plugin API.
-The npm release must include this migration before the package name can be
-used with v2. To try this branch now, build it locally with Node.js 26.4 or
-newer and pnpm 10.8:
+Requires OpenCode 2.0.18 or newer. Install the plugin with the OpenCode CLI:
 
 ```sh
-pnpm install --frozen-lockfile
-pnpm build
+opencode plugin add opencode-open-in-app
 ```
 
-Add the **dist directory** to `~/.config/opencode/cli.json`:
+Or add it to the `plugins` array in `~/.config/opencode/cli.json`:
 
 ```json
 {
-  "plugins": ["/absolute/path/to/opencode-open-in-app/dist"]
+  "plugins": ["opencode-open-in-app"]
 }
 ```
 
-Merge this entry with your existing `plugins` array. Keep the bundle in its
-package directory so peer dependencies remain resolvable. After a v2-compatible
-npm release is published, replace the path with `opencode-open-in-app@<version>`.
 Restart OpenCode after changing the configuration.
 
-Remove the old entry from `opencode.json` or `tui.json`. OpenCode v2 CLI plugins
-use `cli.json` and the plural `plugins` key. See the
+## Migrating from OpenCode v1
+
+Version 1.0.0 uses the native `@opencode/plugin/tui` API and no longer supports
+OpenCode v1. On OpenCode v1, pin `opencode-open-in-app@0.1.0`.
+
+When moving to v2, remove the old entry from `opencode.json` or `tui.json`.
+OpenCode v2 CLI plugins use `cli.json` and the plural `plugins` key. See the
 [official plugin documentation](https://opencode.ai/v2/docs/cli/plugins).
 Preferences from the v1 key-value store are not imported; set them again once
 in v2.
 
 ## Development
 
-Bun is required for the native OpenTUI tests. CI uses Bun 1.4.2.
+Development needs Node.js 26.4 or newer and pnpm 10.8. Bun is required for
+the native OpenTUI tests. CI uses Bun 1.4.2.
 
 ```sh
 pnpm typecheck
