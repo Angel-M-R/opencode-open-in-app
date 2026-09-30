@@ -20,7 +20,7 @@
   "type": "module",
   "packageManager": "pnpm@10.8.0",
   "engines": {
-    "node": ">=22.13"
+    "node": ">=26.4.0"
   },
   "main": "./dist/tui.js",
   "types": "./dist/tui.d.ts",

@@ -20,7 +20,7 @@ The favourite is saved with OpenCode's native plugin storage.
 This branch targets OpenCode 2.0.18 and OpenTUI 0.5.12. It uses the native
 `@opencode/plugin/tui` API and no longer supports the v1 plugin API.
 The npm release must include this migration before the package name can be
-used with v2. To try this branch now, build it locally with Node.js 22.13 or
+used with v2. To try this branch now, build it locally with Node.js 26.4 or
 newer and pnpm 10.8:
 
 ```sh
