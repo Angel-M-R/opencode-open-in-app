@@ -41,6 +41,7 @@ test("native slots, keyboard picker, preference persistence and session project"
       launch: async (_app, path) => { launches.push(path); return { success: true }; } });
     cleanup = await plugin.setup(context);
     const sidebar = slots.find(slot => slot.prepend === "sidebar.content");
+    expect(sidebar).toBeDefined();
     rendering = await testRender(() => sidebar.render({ sessionID: "s" }), { width: 60, height: 10 });
     await rendering.renderOnce(); await tick();
     expect(rendering.captureCharFrame()).toContain("Open in");
